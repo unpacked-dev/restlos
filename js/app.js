@@ -673,6 +673,7 @@ function openSheet(title, build, color) {
 }
 function onSheetClose() {
   $('#sheet-body').replaceChildren();
+  resetSheetDrag();
   if (toastEl.parentNode !== document.body) document.body.append(toastEl);
 }
 function closeSheet() {
@@ -682,6 +683,70 @@ function closeSheet() {
 }
 sheet.addEventListener('close', onSheetClose);
 sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
+
+// ----- Sheet nach unten wischen zum Schließen (nur Handy-Layout mit Griff) -----
+const sheetPanel = $('.sheet-panel');
+const sheetBody = $('#sheet-body');
+const wideLayout = window.matchMedia('(min-width: 640px)');
+const drag = { x0: 0, y0: 0, dy: 0, v: 0, lastY: 0, lastT: 0, armed: false, active: false };
+
+function resetSheetDrag() {
+  drag.armed = drag.active = false;
+  drag.dy = 0;
+  sheetPanel.style.transition = '';
+  sheetPanel.style.transform = '';
+  sheet.style.removeProperty('--sheet-fade');
+}
+sheetPanel.addEventListener('touchstart', e => {
+  drag.active = false;
+  drag.dy = 0;
+  const t = e.target;
+  // Nicht in Eingabefeldern; im Inhalt nur, wenn er ganz oben ist
+  drag.armed = e.touches.length === 1 && !wideLayout.matches && !t.closest('input, select, textarea')
+    && (!sheetBody.contains(t) || sheetBody.scrollTop <= 0);
+  drag.y0 = e.touches[0].clientY;
+  drag.x0 = e.touches[0].clientX;
+  drag.lastY = drag.y0;
+  drag.lastT = performance.now();
+  drag.v = 0;
+}, { passive: true });
+sheetPanel.addEventListener('touchmove', e => {
+  if (!drag.armed) return;
+  const dy = e.touches[0].clientY - drag.y0, dx = e.touches[0].clientX - drag.x0;
+  if (!drag.active) {
+    // Erst nach unten und eher senkrecht ziehen, sonst normal scrollen
+    if (dy < -4 || Math.abs(dx) > Math.abs(dy)) { drag.armed = false; return; }
+    if (dy < 8) return;
+    drag.active = true;
+    sheetPanel.style.transition = 'none';
+  }
+  e.preventDefault();
+  // Geschwindigkeit der letzten Bewegung (px pro ms), leicht geglättet
+  const now = performance.now(), y = e.touches[0].clientY;
+  if (now > drag.lastT) drag.v = 0.6 * ((y - drag.lastY) / (now - drag.lastT)) + 0.4 * drag.v;
+  drag.lastY = y;
+  drag.lastT = now;
+  drag.dy = Math.max(0, dy);
+  sheetPanel.style.transform = `translateY(${drag.dy}px)`;
+  sheet.style.setProperty('--sheet-fade', String(Math.max(0, 1 - drag.dy / sheetPanel.offsetHeight)));
+}, { passive: false });
+function endSheetDrag() {
+  if (!drag.active) { drag.armed = false; return; }
+  const close = drag.dy > Math.min(140, sheetPanel.offsetHeight * 0.3) || (drag.v > 0.5 && drag.dy > 30);
+  drag.active = drag.armed = false;
+  sheetPanel.style.transition = 'transform .22s cubic-bezier(.2, .8, .2, 1)';
+  if (close) {
+    sheetPanel.style.transform = 'translateY(100%)';
+    sheet.style.setProperty('--sheet-fade', '0');
+    setTimeout(closeSheet, 200);
+  } else {
+    sheetPanel.style.transform = '';
+    sheet.style.removeProperty('--sheet-fade');
+    setTimeout(() => { if (!drag.active) sheetPanel.style.transition = ''; }, 240);
+  }
+}
+sheetPanel.addEventListener('touchend', endSheetDrag);
+sheetPanel.addEventListener('touchcancel', endSheetDrag);
 $('#sheet-close').addEventListener('click', closeSheet);
 
 function toast(msg, action) {

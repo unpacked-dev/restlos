@@ -292,7 +292,7 @@ h1, h2, h3 { text-wrap: balance; }
   position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0;
   border: 0; background: transparent; color: var(--ink); overflow: hidden;
 }
-.sheet::backdrop { background: var(--scrim); }
+.sheet::backdrop { background: var(--scrim); opacity: var(--sheet-fade, 1); }
 .sheet[open]::backdrop { animation: fade .2s ease-out; }
 .sheet-panel {
   position: absolute; left: 0; right: 0; bottom: 0; width: 100%; max-width: 560px; max-height: calc(100% - 32px);
@@ -300,6 +300,7 @@ h1, h2, h3 { text-wrap: balance; }
   border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--shadow); animation: sheet-up .26s cubic-bezier(.2, .8, .2, 1);
 }
 .sheet-panel::before { content: ""; display: block; flex: none; width: 36px; height: 4px; margin: 8px auto 0; border-radius: 999px; background: var(--line-strong); }
+.sheet-head { touch-action: none; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 6px 20px; }
 .sheet-head h2 { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: var(--t-lg); font-weight: 720; letter-spacing: -.015em; overflow-wrap: anywhere; }
 .sheet-body { overflow-y: auto; overscroll-behavior: contain; padding: 8px 20px calc(24px + env(safe-area-inset-bottom, 0px)); }
