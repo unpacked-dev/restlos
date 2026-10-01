@@ -2,6 +2,18 @@
 
 Schulden-Tracker im Browser: Schulden erfassen, Tilgungsplan sehen und wissen, in wie vielen Monaten du schuldenfrei bist. Ohne Server, deine Daten bleiben lokal.
 
+**[➜ Live ausprobieren](https://unpacked-dev.github.io/restlos/)** – beim ersten Öffnen siehst du Beispieldaten.
+
+## Screenshots
+
+| Übersicht | Schulden & Zahlungen | Tilgungsplan |
+| :---: | :---: | :---: |
+| <img src="docs/screenshots/01-uebersicht.png" width="260" alt="Übersicht mit Countdown bis schuldenfrei, Kennzahlen und Verlaufsdiagramm"> | <img src="docs/screenshots/02-schulden-zahlungen.png" width="260" alt="Liste der Schulden mit Fortschritt und die nächsten Zahlungen nach Monat"> | <img src="docs/screenshots/03-tilgungsplan.png" width="260" alt="Detailansicht einer Schuld mit Tilgungsplan"> |
+
+| Neue Schuld | Dunkelmodus |
+| :---: | :---: |
+| <img src="docs/screenshots/04-neue-schuld.png" width="260" alt="Formular für eine neue Schuld mit Live-Prognose"> | <img src="docs/screenshots/05-dunkel.png" width="260" alt="Übersicht im Dunkelmodus mit Tooltip im Diagramm"> |
+
 ## Funktionen
 
 - **Countdown:** Wie viele Monate noch bis schuldenfrei, plus Monat der letzten Rate.
@@ -33,7 +45,7 @@ python3 -m http.server 8000
 # dann http://localhost:8000 öffnen
 ```
 
-Läuft auch auf jedem statischen Hosting (z. B. GitHub Pages).
+Läuft auch auf jedem statischen Hosting. Die Live-Version kommt per GitHub Pages direkt aus `main`.
 
 ## Projektstruktur
 
@@ -43,6 +55,7 @@ css/style.css       Styles, Farben (inkl. Dark Mode) und @font-face
 js/app.js           Rechenlogik (zwischen LOGIC-START und LOGIC-END, ohne DOM) und Oberfläche
 assets/fonts/       Recursive als WOFF2 (latin, latin-ext) + Lizenz
 assets/favicon.svg  Icon
+docs/screenshots/   Bilder für diese README
 ```
 
 ## Daten
