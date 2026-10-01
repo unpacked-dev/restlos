@@ -24,6 +24,8 @@ Schulden-Tracker im Browser: Schulden erfassen, Tilgungsplan sehen und wissen, i
 - **Überblick:** Restschuld, monatliche Rate gesamt, Zinsen bis zum Ende und Fortschritt in Prozent.
 - **Verlauf:** Gestapeltes Diagramm der Restschuld je Schuld (mit Maus, Touch und Pfeiltasten bedienbar). Auf dem Handy bleibt der Tooltip stehen, bis du außerhalb der Grafik tippst.
 - **Raten als Festbetrag oder prozentual** (z. B. Kreditkarte: 3 % vom Restbetrag, mindestens 25 €).
+- **Restbetrag laut Bank:** Beim Bearbeiten trägst du den aktuellen Stand aus deinem Konto ein, die App rechnet ab der nächsten Rate damit weiter. So gleichst du Abweichungen durch tagesgenaue Zinsen oder Gebühren aus.
+- **Ursprünglicher Betrag** (optional), damit „x % getilgt“ auch bei Krediten stimmt, die schon länger laufen.
 - **Tilgungsplan** pro Schuld mit Rate, Zinsen und Restbetrag je Monat.
 - **Sondertilgungen** über den Plus-Button oder in der Detailansicht einer Schuld, auch für die Zukunft geplant. Die Vorschau zeigt, wie viele Monate früher die Schuld abbezahlt ist und wie viel Zinsen du sparst.
 - **Nächste Zahlungen** nach Monat gruppiert.

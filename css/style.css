@@ -332,6 +332,7 @@ h1, h2, h3 { text-wrap: balance; }
 }
 .unit { padding-right: 12px; color: var(--ink-2); font-size: var(--t-sm); white-space: nowrap; }
 .hint { font-size: var(--t-xs); color: var(--ink-2); }
+.form-hint { margin-top: -8px; }
 .err { font-size: var(--t-xs); font-weight: 650; color: var(--critical-ink); }
 .err:empty { display: none; }
 .row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }

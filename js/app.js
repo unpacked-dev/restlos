@@ -818,7 +818,8 @@ function readForm(form, isEdit) {
     payment: parseNum(val('f-payment'), true),
     percent: parseNum(val('f-percent'), false),
     minPayment: parseNum(val('f-min'), true),
-    firstDue: val('f-date')
+    firstDue: val('f-date'),
+    start: val('f-start').trim() === '' ? null : parseNum(val('f-start'), true)
   };
   const errs = {};
   if (!v.name) errs['f-name'] = 'Bitte gib an, wo die Schuld besteht.';
@@ -832,6 +833,11 @@ function readForm(form, isEdit) {
     if (!(v.minPayment >= 0.01 && v.minPayment <= 1e10)) errs['f-min'] = 'Bitte gib den Mindestbetrag ein.';
   }
   if (!isYMD(v.firstDue)) errs['f-date'] = 'Bitte wähle ein Datum.';
+  if (v.start !== null) {
+    if (!(v.start >= 0 && v.start <= 1e10)) errs['f-start'] = 'Bitte einen gültigen Betrag eingeben oder das Feld leer lassen.';
+    else if (amountOk && v.start < v.amount) errs['f-start'] = `Muss mindestens so hoch sein wie der ${isEdit ? 'Restbetrag' : 'Betrag oben'}.`;
+    else v.start = round2(v.start);
+  }
   for (const k of ['amount', 'payment', 'minPayment']) v[k] = Number.isFinite(v[k]) && v[k] >= 0 ? round2(v[k]) : 0;
   for (const k of ['rate', 'percent']) v[k] = Number.isFinite(v[k]) && v[k] >= 0 ? round4(v[k]) : 0;
   return { v, errs };
@@ -873,8 +879,9 @@ function openForm(id) {
     payment: d.payment ? inputMoney(d.payment) : '',
     percent: d.percent ? inputPct(d.percent) : '',
     minPayment: d.minPayment ? inputMoney(d.minPayment) : '',
-    firstDue: a.next ? a.next.date : t
-  } : { name: '', amount: '', rate: '', mode: 'fixed', payment: '', percent: '', minPayment: '', firstDue: firstOfNextMonth(t) };
+    firstDue: a.next ? a.next.date : t,
+    start: inputMoney(Math.max(d.startAmount, d.amount))
+  } : { name: '', amount: '', rate: '', mode: 'fixed', payment: '', percent: '', minPayment: '', firstDue: firstOfNextMonth(t), start: '' };
   openSheet(d ? 'Schuld bearbeiten' : 'Neue Schuld', body => {
     body.innerHTML = `
     <form class="form" id="debt-form" novalidate>
@@ -884,8 +891,15 @@ function openForm(id) {
         <p class="err" id="f-name-err"></p>
       </div>
       <div class="row2">
-        ${field('f-amount', d ? 'Restbetrag heute' : 'Wie viel?', pre.amount, '5.000', '€')}
+        ${field('f-amount', d ? 'Restbetrag laut Bank' : 'Wie viel?', pre.amount, '5.000', '€')}
         ${field('f-rate', 'Zinssatz', pre.rate, '0', '% p.&nbsp;a.')}
+      </div>
+      ${d ? '<p class="hint form-hint">Trag hier den aktuellen Stand aus deinem Konto oder Kreditportal ein. Die App rechnet ab der nächsten Rate mit diesem Betrag weiter. So gleichst du kleine Abweichungen aus, z. B. durch tagesgenaue Zinsen oder Gebühren.</p>' : ''}
+      <div class="field">
+        <label for="f-start">Ursprünglicher Betrag <span class="opt">optional</span></label>
+        <div class="input"><input id="f-start" inputmode="decimal" autocomplete="off" placeholder="${d ? '' : 'z. B. 10.000'}" value="${esc(pre.start)}" aria-describedby="f-start-hint f-start-err"><span class="unit">€</span></div>
+        <p class="hint" id="f-start-hint">Der Betrag zu Beginn des Kredits. Daraus berechnet die App, wie viel du schon getilgt hast.${d ? '' : ' Leer lassen, wenn die Schuld neu ist.'}</p>
+        <p class="err" id="f-start-err"></p>
       </div>
       <fieldset class="field">
         <legend>Rückzahlung</legend>
@@ -965,13 +979,14 @@ function openForm(id) {
       const fields = { name: v.name, amount: v.amount, rate: v.rate, mode: v.mode, payment: v.payment, percent: v.percent, minPayment: v.minPayment };
       if (d) {
         const dueDay = dueDayFor(v);
-        Object.assign(d, fields, { firstDue: v.firstDue, dueDay, startAmount: round2(Math.max(d.startAmount, v.amount)) });
+        const startAmount = v.start !== null ? v.start : Math.max(d.startAmount, v.amount);
+        Object.assign(d, fields, { firstDue: v.firstDue, dueDay, startAmount: round2(Math.max(startAmount, v.amount)) });
         // Der Restbetrag heute enthält alle Sondertilgungen bis heute schon
         for (const x of d.extras) if (x.date <= t) x.settled = true;
         commit('Änderungen gespeichert');
       } else {
         if (state.demo) { state.debts = []; state.demo = false; }
-        state.debts.push({ id: uid(), ...fields, startAmount: v.amount, firstDue: v.firstDue, dueDay: parseYMD(v.firstDue).d, color: null, createdAt: todayStr(), extras: [] });
+        state.debts.push({ id: uid(), ...fields, startAmount: round2(Math.max(v.start ?? 0, v.amount)), firstDue: v.firstDue, dueDay: parseYMD(v.firstDue).d, color: null, createdAt: todayStr(), extras: [] });
         assignColors(state.debts);
         commit('Schuld angelegt');
       }
