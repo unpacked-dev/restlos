@@ -351,6 +351,8 @@ h1, h2, h3 { text-wrap: balance; }
 .preview .alert { display: flex; gap: 6px; color: var(--critical-ink); }
 .preview .alert .ico { margin-top: 3px; }
 .sheet-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+/* Detailansicht: Abstand zwischen Tilgungsplan und Buttons */
+.sheet-body > .sheet-actions { margin-top: 24px; }
 .sheet-actions .btn { flex: 1 1 140px; }
 
 /* Detail */
