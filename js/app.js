@@ -42,6 +42,20 @@ function parseNum(input, money = true) {
   return /^(\d+\.?\d*|\.\d+)$/.test(s) ? Number(s) : NaN;
 }
 
+// Sondertilgung: einmalige Zahlung an einem Datum; settled = schon im Restbetrag enthalten (nach dem Bearbeiten)
+function normalizeExtra(o) {
+  if (!o || typeof o !== 'object') return null;
+  const amount = typeof o.amount === 'number' ? o.amount : typeof o.amount === 'string' && o.amount.trim() ? parseNum(o.amount, true) : NaN;
+  if (!(amount >= 0.01 && amount <= 1e10) || !isYMD(o.date)) return null;
+  return {
+    id: typeof o.id === 'string' && o.id.trim() ? o.id.trim().slice(0, 40) : uid(),
+    date: o.date,
+    amount: round2(amount),
+    settled: o.settled === true
+  };
+}
+const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+
 // Prüft und bereinigt eine Schuld (aus Speicher oder Import); ungültig → null
 function normalizeDebt(o) {
   if (!o || typeof o !== 'object') return null;
@@ -70,7 +84,8 @@ function normalizeDebt(o) {
     firstDue: o.firstDue,
     dueDay: Number.isInteger(day) && day >= 1 && day <= 31 ? day : parseYMD(o.firstDue).d,
     color: Number.isInteger(o.color) && o.color >= 0 && o.color < SLOTS ? o.color : null,
-    createdAt: isYMD(o.createdAt) ? o.createdAt : null
+    createdAt: isYMD(o.createdAt) ? o.createdAt : null,
+    extras: Array.isArray(o.extras) ? o.extras.slice(0, 1000).map(normalizeExtra).filter(Boolean).sort(byDate) : []
   };
 }
 
@@ -91,14 +106,29 @@ function assignColors(list) {
   return list;
 }
 
-// Monat für Monat: Zinsen (Zinssatz/12) aufschlagen, dann Rate abziehen – alles in Cent
+// Monat für Monat: Zinsen (Zinssatz/12) aufschlagen, dann Rate abziehen – alles in Cent.
+// Sondertilgungen senken den Restbetrag an ihrem Datum, vor der nächsten Rate.
 function simulate(d, today) {
   const r = d.rate / 1200;
   const fixed = cents(d.payment), min = cents(d.minPayment), share = d.percent / 100;
-  let bal = cents(d.amount), current = bal, never = false, future = 0;
-  const rows = [];
+  const extras = (d.extras || []).filter(x => !x.settled);
+  let bal = cents(d.amount), current = bal, never = false, future = 0, xi = 0;
+  const rows = [], events = [];
+  const applyExtras = upTo => {
+    while (xi < extras.length && extras[xi].date <= upTo && bal > 0) {
+      const x = extras[xi++];
+      const pay = Math.min(cents(x.amount), bal);
+      bal -= pay;
+      // Sondertilgungen bis einschließlich heute gelten als gezahlt
+      const ev = { type: 'extra', id: x.id, date: x.date, pay, interest: 0, rest: bal, future: x.date > today };
+      events.push(ev);
+      if (!ev.future) current = bal;
+    }
+  };
   for (let k = 0; k < 6000 && bal > 0; k++) {
     const date = dueDate(d.firstDue, d.dueDay, k);
+    applyExtras(date);
+    if (bal <= 0) break;
     const isFuture = date >= today;
     if (isFuture && ++future > (never ? NEVER_PREVIEW : MAX_MONTHS)) break;
     const interest = Math.round(bal * r);
@@ -107,34 +137,38 @@ function simulate(d, today) {
     if (pay > owed) pay = owed;
     const rest = owed - pay;
     if (isFuture && rest >= bal) never = true;
-    rows.push({ date, pay, interest, rest, future: isFuture });
+    const row = { type: 'rate', date, pay, interest, rest, future: isFuture };
+    rows.push(row);
+    events.push(row);
     if (!isFuture) current = rest;
     bal = rest;
     if (bal > 1e14) { never = true; break; }
   }
-  return { rows, current, never, open: bal };
+  return { rows, events, current, never, open: bal };
 }
 
 function analyze(d, today) {
   const sim = simulate(d, today);
   const upcoming = sim.rows.filter(r => r.future);
-  let status = 'ok';
+  const plan = sim.events.filter(e => e.future); // künftige Raten und Sondertilgungen
+  let status = 'long';
   if (sim.current <= 0) status = 'paid';
+  else if (sim.open <= 0) status = 'ok';
   else if (sim.never) status = 'never';
-  else if (sim.open > 0) status = 'long';
-  const last = status === 'ok' ? upcoming[upcoming.length - 1] : null;
+  const last = status === 'ok' ? plan[plan.length - 1] : null;
   const finite = status === 'ok' || status === 'paid';
-  const sumOf = key => upcoming.reduce((s, r) => s + r[key], 0);
   const start = Math.max(cents(d.startAmount), cents(d.amount));
   return {
     debt: d,
     upcoming,
+    plan,
+    events: sim.events,
     current: sim.current,
     status,
     payoff: last ? last.date : null,
     months: last ? monthIdx(last.date) - monthIdx(today) : (status === 'paid' ? 0 : Infinity),
-    interestLeft: finite ? sumOf('interest') : Infinity,
-    totalLeft: finite ? sumOf('pay') : Infinity,
+    interestLeft: finite ? upcoming.reduce((s, r) => s + r.interest, 0) : Infinity,
+    totalLeft: finite ? plan.reduce((s, r) => s + r.pay, 0) : Infinity,
     next: upcoming[0] || null,
     progress: start > 0 ? Math.min(1, Math.max(0, 1 - sim.current / start)) : 1
   };
@@ -169,7 +203,7 @@ function chartSeries(list, today) {
   const n = horizon + 2;
   const valuesOf = a => {
     const byMonth = new Map();
-    for (const r of a.upcoming) byMonth.set(monthIdx(r.date), r.rest);
+    for (const r of a.plan) byMonth.set(monthIdx(r.date), r.rest);
     const vals = new Array(n);
     let v = a.current;
     vals[0] = v;
@@ -264,6 +298,7 @@ const inputPct = v => String(round4(v)).replace('.', ',');
 const payShort = d => (d.mode === 'percent' ? `${pctTxt(d.percent)}, mind. ${eurVal(d.minPayment)}` : `${eurVal(d.payment)} mtl.`);
 const payLong = d => (d.mode === 'percent' ? `${pctTxt(d.percent)} vom Restbetrag, mind. ${eurVal(d.minPayment)}` : `${eurVal(d.payment)} pro Monat`);
 
+const ICON_X = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 const ICONS = {
   check: '<path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
   warn: '<path d="M8 2 14.6 13.5H1.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.4v3.1M8 11.6v.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'
@@ -280,7 +315,7 @@ function icon(name) {
 
 const state = { debts: [], demo: false, payMonths: 3 };
 let view = null;
-const chart = { data: null, geom: null, i: null, timer: 0, width: 0 };
+const chart = { data: null, geom: null, i: null, width: 0 };
 
 function render() {
   const t = todayStr();
@@ -291,6 +326,7 @@ function render() {
   const has = list.length > 0;
   $('#empty').hidden = has;
   for (const id of ['overview', 'debts-sec', 'foot', 'fab']) $('#' + id).hidden = !has;
+  closeFabMenu();
   $('#demo-banner').hidden = !(has && state.demo);
   $('#storage-warn').hidden = storageOK || state.demo || !has;
   if (!has) {
@@ -309,7 +345,7 @@ function render() {
   $('#storage-info').textContent = state.demo
     ? 'Beispieldaten werden nicht gespeichert.'
     : storageOK
-      ? 'Deine Daten liegen nur in diesem Browser (localStorage). Sichere sie ab und zu über „Import / Export“.'
+      ? 'Deine Daten liegen nur in diesem Browser (localStorage). Sichere sie ab und zu über „Einstellungen“.'
       : 'Speichern ist in diesem Browser nicht möglich. Exportiere deine Daten, bevor du die Seite schließt.';
 }
 
@@ -475,15 +511,15 @@ function hideTip() {
 function pointAt(e) {
   const g = chart.geom;
   if (!g) return;
-  clearTimeout(chart.timer);
   const r = cbox.getBoundingClientRect();
   showTip(Math.round(((e.clientX - r.left - g.pad.l) / g.iw) * (g.n - 1)));
 }
 cbox.addEventListener('pointermove', pointAt);
 cbox.addEventListener('pointerdown', pointAt);
-cbox.addEventListener('pointerleave', e => {
-  clearTimeout(chart.timer);
-  chart.timer = setTimeout(hideTip, e.pointerType === 'mouse' ? 0 : 1800);
+// Maus: Tooltip verschwindet beim Verlassen. Touch: Tooltip bleibt, bis man außerhalb der Grafik tippt.
+cbox.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hideTip(); });
+document.addEventListener('pointerdown', e => {
+  if (chart.i != null && !cbox.contains(e.target)) hideTip();
 });
 cbox.addEventListener('keydown', e => {
   const g = chart.geom;
@@ -572,7 +608,7 @@ function renderDebts(list) {
 // ----- Nächste Zahlungen, nach Monat gruppiert -----
 function renderPayments(list, t) {
   const items = [];
-  for (const a of list) a.upcoming.forEach((r, k) => items.push({ a, r, last: a.status === 'ok' && k === a.upcoming.length - 1 }));
+  for (const a of list) a.plan.forEach((r, k) => items.push({ a, r, last: a.status === 'ok' && k === a.plan.length - 1 }));
   items.sort((p, q) => (p.r.date < q.r.date ? -1 : p.r.date > q.r.date ? 1 : p.a.debt.name.localeCompare(q.a.debt.name, 'de')));
   const groups = [];
   for (const it of items) {
@@ -594,6 +630,7 @@ function renderPayments(list, t) {
       li.style.setProperty('--c', colorVar(it.a.debt.color));
       const name = el('span', 'pay-name', it.a.debt.name);
       if (it.r.date === t) name.append(el('span', 'tag', 'heute'));
+      if (it.r.type === 'extra') name.append(el('span', 'tag tag-extra', 'Sondertilgung'));
       if (it.last) name.append(el('span', 'tag tag-last', 'letzte Rate'));
       const dot = el('span', 'dot');
       dot.setAttribute('aria-hidden', 'true');
@@ -670,6 +707,7 @@ function restore(s) {
   state.demo = s.demo;
   persist();
   render();
+  closeSheet();
   toast('Wiederhergestellt');
 }
 function commit(msg, undo) {
@@ -708,7 +746,17 @@ function openDetail(id) {
   const payoff = a.status === 'ok'
     ? (a.months <= 0 ? `${monthLong(a.payoff)} · diesen Monat` : `${monthLong(a.payoff)} · in ${monthsTxt(a.months)}`)
     : a.status === 'paid' ? 'Erledigt' : 'Nicht absehbar';
-  const rows = a.upcoming.map((r, k) => `<tr${a.status === 'ok' && k === a.upcoming.length - 1 ? ' class="is-last"' : ''}><td>${dfShort.format(toDate(r.date))}</td><td>${nfAmt.format(r.pay / 100)}</td><td>${nfAmt.format(r.interest / 100)}</td><td>${nfAmt.format(r.rest / 100)}</td></tr>`).join('');
+  const rows = a.plan.map((r, k) => {
+    const cls = [r.type === 'extra' ? 'is-extra' : '', a.status === 'ok' && k === a.plan.length - 1 ? 'is-last' : ''].filter(Boolean).join(' ');
+    const interest = r.type === 'extra' ? '<td class="lbl">Sondertilgung</td>' : `<td>${nfAmt.format(r.interest / 100)}</td>`;
+    return `<tr${cls ? ` class="${cls}"` : ''}><td>${dfShort.format(toDate(r.date))}</td><td>${nfAmt.format(r.pay / 100)}</td>${interest}<td>${nfAmt.format(r.rest / 100)}</td></tr>`;
+  }).join('');
+  const extras = [...d.extras].sort(byDate).reverse().map(x => `
+          <li>
+            <span class="num xl-date">${esc(dateTxt(x.date))}</span>
+            <span class="xl-main"><span class="num">${esc(eur(cents(x.amount)))}</span>${x.settled ? '<span class="tag">im Restbetrag enthalten</span>' : x.date > todayStr() ? '<span class="tag">geplant</span>' : ''}</span>
+            <button type="button" class="icon-btn sm" data-del-extra="${esc(x.id)}" aria-label="${esc(`Sondertilgung vom ${dateTxt(x.date)} löschen`)}">${ICON_X}</button>
+          </li>`).join('');
   const color = colorVar(d.color);
   openSheet(d.name, body => {
     body.innerHTML = `
@@ -727,25 +775,38 @@ function openDetail(id) {
         <div><dt>Noch zu zahlen</dt><dd>${finite ? esc(`${eur(a.totalLeft)} · ${ratesTxt(a.upcoming.length)}`) : '–'}</dd></div>
         <div><dt>Davon Zinsen</dt><dd>${finite ? esc(eur(a.interestLeft)) : '–'}</dd></div>
       </dl>
-      ${a.upcoming.length ? `
+      ${extras ? `
+      <h3 class="sub-h">Sondertilgungen</h3>
+      <ul class="xlist">${extras}</ul>` : ''}
+      ${a.plan.length ? `
       <h3 class="sub-h">Tilgungsplan</h3>
       <div class="table-wrap">
         <table class="plan">
-          <caption>Beträge in Euro${a.status === 'ok' ? '' : ' · die ersten 10 Jahre'}</caption>
+          <caption>Beträge in Euro${a.status === 'ok' ? '' : ' · die ersten 10 Jahre'}${d.extras.some(x => !x.settled && x.date > todayStr()) ? ' · inklusive geplanter Sondertilgungen' : ''}</caption>
           <thead><tr><th scope="col">Datum</th><th scope="col">Rate</th><th scope="col">Zinsen</th><th scope="col">Rest</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>` : ''}
       <div class="sheet-actions">
         <button type="button" class="btn" id="dt-edit">Bearbeiten</button>
+        ${a.status === 'paid' ? '' : '<button type="button" class="btn ghost" id="dt-extra">Sondertilgung</button>'}
         <button type="button" class="btn ghost danger" id="dt-delete">Löschen</button>
       </div>`;
     $('#dt-edit', body).addEventListener('click', () => openForm(id));
+    if (a.status !== 'paid') $('#dt-extra', body).addEventListener('click', () => openExtraForm(id, true));
     $('#dt-delete', body).addEventListener('click', () => deleteDebt(id));
+    body.querySelectorAll('[data-del-extra]').forEach(b => b.addEventListener('click', () => deleteExtra(id, b.dataset.delExtra)));
   }, color);
 }
 
 // ----- Formular: anlegen & bearbeiten -----
+const field = (fid, label, value, placeholder, unit) => `
+      <div class="field">
+        <label for="${fid}">${label}</label>
+        <div class="input"><input id="${fid}" inputmode="decimal" autocomplete="off" placeholder="${placeholder}" value="${esc(value)}" aria-describedby="${fid}-err"><span class="unit">${unit}</span></div>
+        <p class="err" id="${fid}-err"></p>
+      </div>`;
+
 function readForm(form, isEdit) {
   const val = id => $('#' + id, form).value;
   const mode = $('#f-mode-percent', form).checked ? 'percent' : 'fixed';
@@ -814,12 +875,6 @@ function openForm(id) {
     minPayment: d.minPayment ? inputMoney(d.minPayment) : '',
     firstDue: a.next ? a.next.date : t
   } : { name: '', amount: '', rate: '', mode: 'fixed', payment: '', percent: '', minPayment: '', firstDue: firstOfNextMonth(t) };
-  const field = (fid, label, value, placeholder, unit) => `
-      <div class="field">
-        <label for="${fid}">${label}</label>
-        <div class="input"><input id="${fid}" inputmode="decimal" autocomplete="off" placeholder="${placeholder}" value="${esc(value)}" aria-describedby="${fid}-err"><span class="unit">${unit}</span></div>
-        <p class="err" id="${fid}-err"></p>
-      </div>`;
   openSheet(d ? 'Schuld bearbeiten' : 'Neue Schuld', body => {
     body.innerHTML = `
     <form class="form" id="debt-form" novalidate>
@@ -911,10 +966,12 @@ function openForm(id) {
       if (d) {
         const dueDay = dueDayFor(v);
         Object.assign(d, fields, { firstDue: v.firstDue, dueDay, startAmount: round2(Math.max(d.startAmount, v.amount)) });
+        // Der Restbetrag heute enthält alle Sondertilgungen bis heute schon
+        for (const x of d.extras) if (x.date <= t) x.settled = true;
         commit('Änderungen gespeichert');
       } else {
         if (state.demo) { state.debts = []; state.demo = false; }
-        state.debts.push({ id: uid(), ...fields, startAmount: v.amount, firstDue: v.firstDue, dueDay: parseYMD(v.firstDue).d, color: null, createdAt: todayStr() });
+        state.debts.push({ id: uid(), ...fields, startAmount: v.amount, firstDue: v.firstDue, dueDay: parseYMD(v.firstDue).d, color: null, createdAt: todayStr(), extras: [] });
         assignColors(state.debts);
         commit('Schuld angelegt');
       }
@@ -923,8 +980,148 @@ function openForm(id) {
   });
 }
 
+// ----- Sondertilgung -----
+// id gesetzt: Schuld steht fest (aus der Detailansicht). Sonst Auswahl aus allen offenen Schulden.
+function openExtraForm(id, fromDetail) {
+  const t = todayStr();
+  const open = state.debts.filter(d => analyze(d, t).status !== 'paid');
+  const fixed = id ? state.debts.find(x => x.id === id) : null;
+  if (id ? !fixed : !open.length) return;
+  const title = fixed ? `Sondertilgung · ${fixed.name}` : 'Sondertilgung';
+  openSheet(title, body => {
+    body.innerHTML = `
+    <form class="form" id="extra-form" novalidate>
+      ${fixed ? '' : `
+      <div class="field">
+        <label for="e-debt">Für welche Schuld?</label>
+        <div class="input select"><select id="e-debt">${open.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('')}</select></div>
+      </div>`}
+      <div class="row2">
+        ${field('e-amount', 'Betrag', '', '1.000', '€')}
+        <div class="field">
+          <label for="e-date">Am</label>
+          <div class="input"><input id="e-date" type="date" value="${esc(t)}" aria-describedby="e-date-err"></div>
+          <p class="err" id="e-date-err"></p>
+        </div>
+      </div>
+      <p class="hint">Eine Sondertilgung senkt den Restbetrag sofort. Bei einer festen Rate bist du dadurch früher fertig, bei einer prozentualen Rate sinken die nächsten Raten.</p>
+      <div class="preview" id="e-preview" aria-live="polite"></div>
+      <div class="sheet-actions">
+        <button type="submit" class="btn">Sondertilgung speichern</button>
+      </div>
+    </form>`;
+    const form = $('#extra-form', body);
+    const debt = () => fixed || state.debts.find(x => x.id === $('#e-debt', form).value);
+    const read = () => {
+      const v = { amount: parseNum($('#e-amount', form).value, true), date: $('#e-date', form).value };
+      const errs = {};
+      if (!(v.amount >= 0.01 && v.amount <= 1e10)) errs['e-amount'] = 'Bitte gib einen Betrag über 0 ein.';
+      if (!isYMD(v.date)) errs['e-date'] = 'Bitte wähle ein Datum.';
+      if (Number.isFinite(v.amount)) v.amount = round2(v.amount);
+      return { v, errs };
+    };
+    const preview = () => {
+      const box = $('#e-preview', form);
+      box.replaceChildren();
+      const d = debt();
+      const { v, errs } = read();
+      if (!d || Object.keys(errs).length) {
+        box.append(el('span', '', 'Gib Betrag und Datum ein, dann siehst du hier, was die Sondertilgung bringt.'));
+        return;
+      }
+      const now = todayStr();
+      const before = analyze(d, now);
+      const after = analyze({ ...d, extras: [...d.extras, { id: '__probe', date: v.date, amount: v.amount, settled: false }].sort(byDate) }, now);
+      const ev = after.events.find(e => e.id === '__probe');
+      const alert = msg => {
+        const line = el('span', 'alert');
+        line.append(icon('warn'), el('span', '', msg));
+        box.append(line);
+      };
+      if (!ev) { alert('Zu diesem Datum ist die Schuld schon abbezahlt.'); return; }
+      if (after.status === 'paid' || (after.status === 'ok' && after.plan[after.plan.length - 1] === ev)) {
+        box.append(el('strong', '', `Damit ist „${d.name}“ ${after.status === 'paid' ? 'abbezahlt' : `am ${dateTxt(v.date)} abbezahlt`}`));
+      } else if (after.status === 'ok' && before.status === 'ok') {
+        const diff = before.months - after.months;
+        box.append(el('strong', '', diff > 0 ? `${diff} ${diff === 1 ? 'Monat' : 'Monate'} früher abbezahlt` : 'Gleiche Laufzeit, kleinere Raten'));
+      } else if (after.status === 'ok') {
+        box.append(el('strong', '', `Abbezahlt im ${monthLong(after.payoff)}`));
+      } else {
+        alert(after.status === 'never' ? 'Auch danach deckt die Rate die Zinsen nicht.' : 'Auch danach dauert die Tilgung länger als 50 Jahre.');
+      }
+      const facts = [];
+      if (after.status === 'ok' && after.payoff) facts.push(`Ende ${monthLong(after.payoff)}`);
+      if (before.status === 'ok' && after.status !== 'never' && after.status !== 'long') {
+        const saved = before.interestLeft - after.interestLeft;
+        if (saved > 0) facts.push(`${eur(saved)} weniger Zinsen`);
+      }
+      if (ev.pay < cents(v.amount)) facts.push(`nötig sind nur ${eur(ev.pay)}`);
+      if (facts.length) box.append(el('span', '', facts.join(' · ')));
+    };
+    preview();
+    form.addEventListener('input', e => { clearErr(form, e.target.id); preview(); });
+    form.addEventListener('change', preview);
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const { v, errs } = read();
+      showErrs(form, errs);
+      const first = Object.keys(errs)[0];
+      if (first) { $('#' + first, form).focus(); return; }
+      const d = debt();
+      if (!d) return;
+      const before = snapshot();
+      d.extras.push({ id: uid(), date: v.date, amount: v.amount, settled: false });
+      d.extras.sort(byDate);
+      persist();
+      render();
+      if (fromDetail) openDetail(d.id);
+      else closeSheet();
+      toast('Sondertilgung gespeichert', { label: 'Rückgängig', run: () => restore(before) });
+    });
+  });
+}
+
+function deleteExtra(debtId, extraId) {
+  const d = state.debts.find(x => x.id === debtId);
+  if (!d) return;
+  const before = snapshot();
+  d.extras = d.extras.filter(x => x.id !== extraId);
+  persist();
+  render();
+  openDetail(debtId);
+  toast('Sondertilgung gelöscht', { label: 'Rückgängig', run: () => restore(before) });
+}
+
+// ----- Plus-Button mit Auswahl -----
+const fabBtn = $('#fab');
+const fabMenu = $('#fab-menu');
+function openFabMenu() {
+  const t = todayStr();
+  const hasOpen = state.debts.some(d => analyze(d, t).status !== 'paid');
+  $('#m-extra').disabled = !hasOpen;
+  $('#m-extra-sub').textContent = hasOpen ? 'Extra-Zahlung auf eine Schuld' : 'Keine offene Schuld';
+  fabMenu.hidden = false;
+  fabBtn.setAttribute('aria-expanded', 'true');
+  fabBtn.classList.add('is-open');
+  $('#m-debt').focus();
+}
+function closeFabMenu() {
+  if (fabMenu.hidden) return;
+  fabMenu.hidden = true;
+  fabBtn.setAttribute('aria-expanded', 'false');
+  fabBtn.classList.remove('is-open');
+}
+fabBtn.addEventListener('click', () => (fabMenu.hidden ? openFabMenu() : closeFabMenu()));
+$('#m-debt').addEventListener('click', () => { closeFabMenu(); openForm(); });
+$('#m-extra').addEventListener('click', () => { closeFabMenu(); openExtraForm(); });
+document.addEventListener('pointerdown', e => {
+  if (!fabMenu.hidden && !fabMenu.contains(e.target) && !fabBtn.contains(e.target)) closeFabMenu();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !fabMenu.hidden) { closeFabMenu(); fabBtn.focus(); }
+});
+
 // ----- Bedienelemente der Seite -----
-$('#fab').addEventListener('click', () => openForm());
 $('#btn-empty-add').addEventListener('click', () => openForm());
 $('#btn-empty-demo').addEventListener('click', () => {
   state.debts = demoDebts();
@@ -1109,9 +1306,45 @@ function handleImport(text) {
   choice.scrollIntoView({ block: 'nearest' });
 }
 
-function openData() {
-  openSheet('Import / Export', body => {
+// ----- Darstellung: System, Hell oder Dunkel (js/theme.js setzt sie schon vor dem ersten Zeichnen) -----
+const THEME_KEY = 'restlos.theme';
+function getTheme() {
+  const v = document.documentElement.getAttribute('data-theme');
+  return v === 'light' || v === 'dark' ? v : 'system';
+}
+function setTheme(v) {
+  if (v === 'light' || v === 'dark') document.documentElement.setAttribute('data-theme', v);
+  else document.documentElement.removeAttribute('data-theme');
+  try {
+    if (v === 'light' || v === 'dark') localStorage.setItem(THEME_KEY, v);
+    else localStorage.removeItem(THEME_KEY);
+  } catch (e) {
+    // Darstellung gilt dann nur bis zum Neuladen
+  }
+}
+
+function openSettings() {
+  const theme = getTheme();
+  const radio = (name, value, label, checked, disabled) =>
+    `<input type="radio" name="${name}" id="${name}-${value}" value="${value}"${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}><label for="${name}-${value}">${label}</label>`;
+  openSheet('Einstellungen', body => {
     body.innerHTML = `
+      <section class="data-sec">
+        <h3 class="sub-h" id="s-theme-h">Darstellung</h3>
+        <div class="seg three" role="radiogroup" aria-labelledby="s-theme-h">
+          ${radio('s-theme', 'system', 'System', theme === 'system')}
+          ${radio('s-theme', 'light', 'Hell', theme === 'light')}
+          ${radio('s-theme', 'dark', 'Dunkel', theme === 'dark')}
+        </div>
+      </section>
+      <section class="data-sec">
+        <h3 class="sub-h" id="s-lang-h">Sprache</h3>
+        <div class="seg" role="radiogroup" aria-labelledby="s-lang-h">
+          ${radio('s-lang', 'de', 'Deutsch', true)}
+          ${radio('s-lang', 'en', 'English <span class="soon">bald</span>', false, true)}
+        </div>
+        <p class="hint">Weitere Sprachen kommen bald.</p>
+      </section>
       <section class="data-sec">
         <h3 class="sub-h">Exportieren</h3>
         <p class="hint">Sichert alle Schulden als JSON, als Backup oder für ein anderes Gerät.</p>
@@ -1143,6 +1376,7 @@ function openData() {
         <div class="btn-row"><button type="button" class="btn ghost danger" id="d-clear">Alle Daten löschen</button></div>
       </section>`;
     const q = s => body.querySelector(s);
+    body.querySelectorAll('input[name="s-theme"]').forEach(r => r.addEventListener('change', () => setTheme(r.value)));
     if (claudeHost && downloads === null) q('#x-save').hidden = true;
     q('#x-save').addEventListener('click', saveFile);
     q('#x-copy').addEventListener('click', copyJSON);
@@ -1176,8 +1410,8 @@ function openData() {
     });
   });
 }
-$('#btn-data').addEventListener('click', openData);
-$('#btn-empty-import').addEventListener('click', openData);
+$('#btn-settings').addEventListener('click', openSettings);
+$('#btn-empty-import').addEventListener('click', openSettings);
 
 // ===== Start =====
 function boot() {

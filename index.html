@@ -8,6 +8,7 @@
   <link rel="preload" href="assets/fonts/recursive-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/style.css">
+  <script src="js/theme.js"></script>
 </head>
 <body>
 <div class="app">
@@ -16,9 +17,9 @@
       <svg class="brand-mark" viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 4h5v5h5v5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="17.5" cy="14" r="2.2" fill="currentColor"/></svg>
       restlos
     </h1>
-    <button type="button" class="chip-btn" id="btn-data" aria-haspopup="dialog">
-      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 15.5v-11m0 0L3.5 7.5m3-3 3 3m4 8v-11m0 11-3-3m3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      Import / Export
+    <button type="button" class="chip-btn" id="btn-settings" aria-haspopup="dialog">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 6h7m4 0h2M3.5 14h2m4 0h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12.5" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="14" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+      Einstellungen
     </button>
   </header>
 
@@ -28,7 +29,7 @@
     <button type="button" class="link-btn" id="btn-demo-clear">Leeren</button>
   </div>
   <div class="notice warn" id="storage-warn" hidden>
-    <p>Dieser Browser erlaubt hier kein Speichern. Sichere deine Daten über „Import / Export“, bevor du die Seite schließt.</p>
+    <p>Dieser Browser erlaubt hier kein Speichern. Sichere deine Daten über „Einstellungen“, bevor du die Seite schließt.</p>
   </div>
 
   <main>
@@ -83,12 +84,22 @@
     </section>
 
     <footer class="foot" id="foot" hidden>
-      <p>So wird gerechnet: Zinsen fallen monatlich an (Zinssatz p.&nbsp;a. ÷ 12 auf den Restbetrag) und werden auf Cent gerundet. Prozentuale Raten beziehen sich auf den Restbetrag inklusive Monatszinsen. Raten mit einem Datum vor heute gelten als bezahlt.</p>
+      <p>So wird gerechnet: Zinsen fallen monatlich an (Zinssatz p.&nbsp;a. ÷ 12 auf den Restbetrag) und werden auf Cent gerundet. Prozentuale Raten beziehen sich auf den Restbetrag inklusive Monatszinsen. Raten mit einem Datum vor heute gelten als bezahlt. Sondertilgungen senken den Restbetrag an ihrem Datum; die Zinsen der nächsten Rate werden dann vereinfacht auf den gesenkten Betrag berechnet.</p>
       <p id="storage-info"></p>
     </footer>
   </main>
 
-  <button type="button" class="fab" id="fab" aria-label="Schuld hinzufügen" hidden>
+  <div class="fab-menu" id="fab-menu" role="menu" aria-label="Hinzufügen" hidden>
+    <button type="button" class="fab-item" id="m-debt" role="menuitem">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span><b>Neue Schuld</b><small>Kredit, Karte oder Ratenkauf</small></span>
+    </button>
+    <button type="button" class="fab-item" id="m-extra" role="menuitem">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15.5v-11m0 0L5.5 9m4.5-4.5L14.5 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span><b>Sondertilgung</b><small id="m-extra-sub">Extra-Zahlung auf eine Schuld</small></span>
+    </button>
+  </div>
+  <button type="button" class="fab" id="fab" aria-label="Hinzufügen" aria-haspopup="menu" aria-expanded="false" aria-controls="fab-menu" hidden>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
   </button>
 </div>
