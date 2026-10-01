@@ -1452,5 +1452,9 @@ function boot() {
     state.demo = true;
   }
   render();
+  if (document.documentElement.hasAttribute('data-updated')) {
+    document.documentElement.removeAttribute('data-updated');
+    toast('App aktualisiert');
+  }
 }
 boot();

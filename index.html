@@ -17,8 +17,15 @@
   <meta name="theme-color" content="#0e110f" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="css/style.css">
   <script src="js/theme.js"></script>
+  <script src="js/update.js"></script>
 </head>
 <body>
+<div class="boot" role="status" aria-live="polite">
+  <svg class="boot-mark" viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 4h5v5h5v5h5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="17.5" cy="14" r="2.2" fill="var(--good)"/></svg>
+  <span class="boot-spin" aria-hidden="true"></span>
+  <p>Suche nach Updates …</p>
+  <button type="button" class="link-btn" id="boot-skip" hidden>Ohne Update starten</button>
+</div>
 <div class="app">
   <header class="top">
     <h1 class="brand">

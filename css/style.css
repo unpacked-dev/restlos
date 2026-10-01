@@ -409,6 +409,20 @@ h1, h2, h3 { text-wrap: balance; }
 .data-sec .err { margin-top: 10px; }
 .choice { display: grid; gap: 4px; margin-top: 12px; padding: 14px; border-radius: var(--r-md); background: var(--bg); font-size: var(--t-sm); }
 
+/* Ladebildschirm beim Update-Check (js/update.js) */
+.boot { display: none; }
+html.checking { overflow: hidden; }
+html.checking .boot {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center; gap: 16px;
+  background: var(--bg); color: var(--ink-2); font-size: var(--t-sm); text-align: center;
+}
+.boot-mark { width: 44px; height: 44px; color: var(--ink); }
+.boot-spin {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2.5px solid var(--line-strong); border-top-color: var(--ink); animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* Meldung */
 .toast {
   position: fixed; z-index: 30; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px));
@@ -420,7 +434,8 @@ h1, h2, h3 { text-wrap: balance; }
 .toast-act { flex: none; padding: 4px 0; border: 0; background: none; color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  *:not(.boot-spin), *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  .boot-spin { animation-duration: 2s; }
 }
 
 /* Elemente mit dem hidden-Attribut immer ausblenden, auch wenn eine Klasse display setzt */

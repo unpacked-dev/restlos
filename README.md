@@ -40,7 +40,7 @@ restlos lässt sich wie eine App auf den Homescreen legen und funktioniert danac
 - **Android (Chrome):** Menü → „App installieren“.
 - **Desktop (Chrome / Edge):** Installieren-Symbol in der Adressleiste.
 
-Updates kommen automatisch: Die App lädt neue Versionen im Hintergrund und nutzt sie beim nächsten Öffnen.
+Updates kommen automatisch: Beim Start zeigt die App kurz einen Ladebildschirm und fragt beim Server nach einer neuen Version. Gibt es eine, wird sie geladen und die App startet neu („App aktualisiert“). Ohne Internet, ohne neue Version oder wenn der Server nach 10 Sekunden nicht antwortet, startet die App mit den gespeicherten Dateien. Nach 3 Sekunden kannst du den Check auch selbst überspringen.
 
 > **Wichtig auf dem iPhone:** Die installierte App hat einen eigenen Speicher, getrennt von Safari. Daten, die du vorher in Safari eingegeben hast, sind dort nicht automatisch drin. Übertragen geht so: in Safari unter „Einstellungen“ → „Kopieren“, in der App → „Text einfügen“.
 
@@ -72,7 +72,8 @@ Läuft auch auf jedem statischen Hosting. Die Live-Version kommt per GitHub Page
 index.html          Markup
 css/style.css       Styles, Farben (inkl. Dark Mode) und @font-face
 js/theme.js         setzt Hell/Dunkel vor dem ersten Zeichnen
-sw.js               Service Worker (offline)
+sw.js               Service Worker (offline, Update-Check)
+js/update.js        Update-Check mit Ladebildschirm beim Start
 manifest.webmanifest  App-Name, Farben und Icons für die Installation
 js/app.js           Rechenlogik (zwischen LOGIC-START und LOGIC-END, ohne DOM) und Oberfläche
 assets/fonts/       Recursive als WOFF2 (latin, latin-ext) + Lizenz
