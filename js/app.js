@@ -1413,6 +1413,18 @@ function openSettings() {
 $('#btn-settings').addEventListener('click', openSettings);
 $('#btn-empty-import').addEventListener('click', openSettings);
 
+// ===== Offline (PWA) =====
+// Service Worker nur über http(s), nicht beim direkten Öffnen der Datei und nicht in Claude
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !claudeHost) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+// Browser bitten, die Daten nicht automatisch zu löschen
+if (storageOK && navigator.storage && typeof navigator.storage.persist === 'function') {
+  navigator.storage.persist().catch(() => {});
+}
+
 // ===== Start =====
 function boot() {
   const saved = readStore();

@@ -30,6 +30,18 @@ Schulden-Tracker im Browser: Schulden erfassen, Tilgungsplan sehen und wissen, i
 - **Warnungen**, wenn eine Rate die Zinsen nicht deckt oder die Tilgung über 50 Jahre dauert.
 - **Einstellungen:** Darstellung (System, Hell, Dunkel), Sprache (weitere folgen) sowie Import / Export als JSON (Datei oder Zwischenablage), mit Ersetzen oder Ergänzen.
 
+## Als App installieren (PWA)
+
+restlos lässt sich wie eine App auf den Homescreen legen und funktioniert danach auch offline.
+
+- **iPhone / iPad (Safari):** [Live-Version](https://unpacked-dev.github.io/restlos/) öffnen → Teilen-Symbol → „Zum Home-Bildschirm“.
+- **Android (Chrome):** Menü → „App installieren“.
+- **Desktop (Chrome / Edge):** Installieren-Symbol in der Adressleiste.
+
+Updates kommen automatisch: Die App lädt neue Versionen im Hintergrund und nutzt sie beim nächsten Öffnen.
+
+> **Wichtig auf dem iPhone:** Die installierte App hat einen eigenen Speicher, getrennt von Safari. Daten, die du vorher in Safari eingegeben hast, sind dort nicht automatisch drin. Übertragen geht so: in Safari unter „Einstellungen“ → „Kopieren“, in der App → „Text einfügen“.
+
 ## So wird gerechnet
 
 - Zinsen fallen monatlich an: Zinssatz p. a. ÷ 12 auf den Restbetrag, auf Cent gerundet.
@@ -58,9 +70,12 @@ Läuft auch auf jedem statischen Hosting. Die Live-Version kommt per GitHub Page
 index.html          Markup
 css/style.css       Styles, Farben (inkl. Dark Mode) und @font-face
 js/theme.js         setzt Hell/Dunkel vor dem ersten Zeichnen
+sw.js               Service Worker (offline)
+manifest.webmanifest  App-Name, Farben und Icons für die Installation
 js/app.js           Rechenlogik (zwischen LOGIC-START und LOGIC-END, ohne DOM) und Oberfläche
 assets/fonts/       Recursive als WOFF2 (latin, latin-ext) + Lizenz
 assets/favicon.svg  Icon
+assets/icons/       App-Icons (PNG für iOS/Android, SVG-Vorlage)
 docs/screenshots/   Bilder für diese README
 ```
 
