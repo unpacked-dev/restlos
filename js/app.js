@@ -568,7 +568,9 @@ function renderLegend(list) {
 function renderDebts(list) {
   const ul = $('#debt-list');
   ul.replaceChildren();
-  const sorted = [...list].sort((a, b) => (a.status === 'paid') - (b.status === 'paid'));
+  // Größter Restbetrag zuerst, abbezahlte ans Ende; bei Gleichstand nach Name
+  const sorted = [...list].sort((a, b) =>
+    (a.status === 'paid') - (b.status === 'paid') || b.current - a.current || a.debt.name.localeCompare(b.debt.name, 'de'));
   for (const a of sorted) {
     const d = a.debt;
     const btn = el('button', a.status === 'paid' ? 'debt is-paid' : 'debt');
