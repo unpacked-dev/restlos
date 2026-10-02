@@ -84,6 +84,11 @@ body {
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
+/* Als App vom Homescreen: Inhalt beim Scrollen nicht hinter Uhrzeit und Statusleiste zeigen */
+body::before {
+  content: ""; position: fixed; z-index: 20; top: 0; left: 0; right: 0;
+  height: env(safe-area-inset-top, 0px); background: var(--bg); pointer-events: none;
+}
 button, input, textarea { font: inherit; color: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 h1, h2, h3, p, figure, dl, dd { margin: 0; }
